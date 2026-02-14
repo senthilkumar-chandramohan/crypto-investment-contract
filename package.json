@@ -1,0 +1,36 @@
+{
+  "name": "crypto-investment-contract",
+  "version": "1.0.0",
+  "description": "Contract and server to create and expose crypto investments.",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:hardhat": "hardhat run scripts/deploy.js --network hardhat",
+    "node": "hardhat node",
+    "server": "node server/index.js",
+    "clean": "hardhat clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/senthilkumar-chandramohan/crypto-investment-contract.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/senthilkumar-chandramohan/crypto-investment-contract/issues"
+  },
+  "homepage": "https://github.com/senthilkumar-chandramohan/crypto-investment-contract#readme",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "hardhat": "^2.28.6"
+  }
+}
