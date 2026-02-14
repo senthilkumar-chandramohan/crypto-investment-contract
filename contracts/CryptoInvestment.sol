@@ -46,10 +46,10 @@ contract CryptoInvestment {
         investments[msg.sender] -= amount;
         totalInvestment -= amount;
         
+        emit InvestmentWithdrawn(msg.sender, amount);
+        
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Transfer failed");
-        
-        emit InvestmentWithdrawn(msg.sender, amount);
     }
     
     /**
