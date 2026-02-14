@@ -50,7 +50,7 @@ app.post('/deploy', async (req, res) => {
     const targetNetwork = network || 'localhost';
 
     // Validate network parameter to prevent command injection
-    const allowedNetworks = ['localhost', 'hardhat', 'sepolia', 'mainnet', 'goerli'];
+    const allowedNetworks = ['localhost', 'hardhat', 'sepolia', 'mainnet'];
     if (!allowedNetworks.includes(targetNetwork)) {
       releaseLock();
       return res.status(400).json({
