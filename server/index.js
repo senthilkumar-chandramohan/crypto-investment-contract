@@ -9,6 +9,20 @@ const execAsync = promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Simple mutex to prevent concurrent operations
+let operationInProgress = false;
+
+const acquireLock = async () => {
+  while (operationInProgress) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  operationInProgress = true;
+};
+
+const releaseLock = () => {
+  operationInProgress = false;
+};
+
 app.use(express.json());
 
 // Health check endpoint
@@ -19,8 +33,20 @@ app.get('/health', (req, res) => {
 // Deploy contract endpoint
 app.post('/deploy', async (req, res) => {
   try {
+    await acquireLock();
+    
     const { network } = req.body;
     const targetNetwork = network || 'localhost';
+
+    // Validate network parameter to prevent command injection
+    const allowedNetworks = ['localhost', 'hardhat', 'sepolia', 'mainnet', 'goerli'];
+    if (!allowedNetworks.includes(targetNetwork)) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid network. Allowed networks: ${allowedNetworks.join(', ')}`
+      });
+    }
 
     console.log(`Starting deployment to ${targetNetwork}...`);
 
@@ -37,6 +63,8 @@ app.post('/deploy', async (req, res) => {
     const deploymentInfoPath = path.join(__dirname, '..', 'deployment-info.json');
     const deploymentInfo = JSON.parse(await fs.readFile(deploymentInfoPath, 'utf8'));
 
+    releaseLock();
+    
     res.json({
       success: true,
       message: 'Contract deployed successfully',
@@ -44,6 +72,7 @@ app.post('/deploy', async (req, res) => {
       logs: stdout
     });
   } catch (error) {
+    releaseLock();
     console.error('Deployment failed:', error);
     res.status(500).json({
       success: false,
@@ -71,6 +100,8 @@ app.get('/deployment-info', async (req, res) => {
 // Compile contracts endpoint
 app.post('/compile', async (req, res) => {
   try {
+    await acquireLock();
+    
     console.log('Starting contract compilation...');
 
     const { stdout, stderr } = await execAsync(
@@ -81,12 +112,15 @@ app.post('/compile', async (req, res) => {
     console.log('Compilation output:', stdout);
     if (stderr) console.error('Compilation warnings:', stderr);
 
+    releaseLock();
+    
     res.json({
       success: true,
       message: 'Contracts compiled successfully',
       logs: stdout
     });
   } catch (error) {
+    releaseLock();
     console.error('Compilation failed:', error);
     res.status(500).json({
       success: false,
@@ -99,6 +133,8 @@ app.post('/compile', async (req, res) => {
 // Test contracts endpoint
 app.post('/test', async (req, res) => {
   try {
+    await acquireLock();
+    
     console.log('Starting contract tests...');
 
     const { stdout, stderr } = await execAsync(
@@ -109,12 +145,15 @@ app.post('/test', async (req, res) => {
     console.log('Test output:', stdout);
     if (stderr) console.error('Test warnings:', stderr);
 
+    releaseLock();
+    
     res.json({
       success: true,
       message: 'Tests completed successfully',
       logs: stdout
     });
   } catch (error) {
+    releaseLock();
     console.error('Tests failed:', error);
     res.status(500).json({
       success: false,
