@@ -4,9 +4,11 @@ const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
 const execAsync = promisify(exec);
+const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -36,6 +38,13 @@ const releaseLock = () => {
 
 app.use(express.json());
 
+// Stablecoin address mapping
+const STABLECOIN_ADDRESSES = {
+  'PYUSD': '0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9',
+  'USDC': '0xf08a50178dfcde18524640ea6618a1f965821715',
+  'USDT': '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0'
+};
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Deployment server is running' });
@@ -46,25 +55,86 @@ app.post('/deploy', async (req, res) => {
   try {
     await acquireLock();
     
-    const { network } = req.body;
-    const targetNetwork = network || 'localhost';
-
-    // Validate network parameter to prevent command injection
-    const allowedNetworks = ['localhost', 'hardhat', 'sepolia', 'mainnet'];
-    if (!allowedNetworks.includes(targetNetwork)) {
+    const { stableCoin, roiPercentage, riskLevel } = req.body;
+    
+    // Validate required parameters
+    if (!stableCoin) {
       releaseLock();
       return res.status(400).json({
         success: false,
-        message: `Invalid network. Allowed networks: ${allowedNetworks.join(', ')}`
+        message: 'stableCoin is required (PYUSD, USDC, or USDT)'
       });
     }
+    
+    if (!roiPercentage) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: 'roiPercentage is required'
+      });
+    }
+    
+    if (!riskLevel) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: 'riskLevel is required (LOW, MEDIUM, or HIGH)'
+      });
+    }
+    
+    // Validate and map stablecoin
+    const stableCoinUpper = stableCoin.toUpperCase();
+    const validStablecoins = Object.keys(STABLECOIN_ADDRESSES);
+    if (!validStablecoins.includes(stableCoinUpper)) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid stablecoin. Must be one of: ${validStablecoins.join(', ')}`
+      });
+    }
+    
+    const stablecoinAddress = STABLECOIN_ADDRESSES[stableCoinUpper];
+    
+    // Validate risk level
+    const validRiskLevels = ['LOW', 'MEDIUM', 'HIGH'];
+    if (!validRiskLevels.includes(riskLevel.toUpperCase())) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid risk level. Must be one of: ${validRiskLevels.join(', ')}`
+      });
+    }
+    
+    // Validate ROI percentage
+    const roi = parseFloat(roiPercentage);
+    if (isNaN(roi) || roi <= 0 || roi > 100) {
+      releaseLock();
+      return res.status(400).json({
+        success: false,
+        message: 'roiPercentage must be a number between 0.01 and 100 (supports decimals)'
+      });
+    }
+    
+    // Convert ROI to basis points (multiply by 100 for 2 decimal places)
+    const roiBasisPoints = Math.round(roi * 100);
 
-    console.log(`Starting deployment to ${targetNetwork}...`);
+    console.log('Starting deployment to Sepolia...');
+    console.log(`Stablecoin: ${stableCoinUpper} (${stablecoinAddress})`);
+    console.log(`ROI: ${roiPercentage}% (${roiBasisPoints} basis points)`);
+    console.log(`Risk Level: ${riskLevel}`);
 
-    // Run the deployment script
+    // Run the deployment script with parameters (fixed to Sepolia network)
     const { stdout, stderr } = await execAsync(
-      `npx hardhat run scripts/deploy.js --network ${targetNetwork}`,
-      { cwd: path.join(__dirname, '..') }
+      'npx hardhat run scripts/deploy.js --network sepolia',
+      { 
+        cwd: path.join(__dirname, '..'),
+        env: {
+          ...process.env,
+          STABLECOIN_ADDRESS: stablecoinAddress,
+          ROI_PERCENTAGE: roiBasisPoints.toString(),
+          RISK_LEVEL: riskLevel.toUpperCase()
+        }
+      }
     );
 
     console.log('Deployment output:', stdout);
@@ -103,6 +173,66 @@ app.get('/deployment-info', async (req, res) => {
     res.status(404).json({
       success: false,
       message: 'No deployment information found',
+      error: error.message
+    });
+  }
+});
+
+// Get contract by address from database
+app.get('/contracts/:address', async (req, res) => {
+  try {
+    const contract = await prisma.investmentContract.findUnique({
+      where: { contractAddress: req.params.address }
+    });
+    
+    if (!contract) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contract not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      contract
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch contract',
+      error: error.message
+    });
+  }
+});
+
+// Get all contracts from database
+app.get('/contracts', async (req, res) => {
+  try {
+    const { stableCoin, riskLevel, minRoi, maxRoi } = req.query;
+    
+    const where = {};
+    if (stableCoin) where.stableCoin = stableCoin;
+    if (riskLevel) where.riskLevel = riskLevel.toUpperCase();
+    if (minRoi || maxRoi) {
+      where.rateOfInterest = {};
+      if (minRoi) where.rateOfInterest.gte = parseInt(minRoi);
+      if (maxRoi) where.rateOfInterest.lte = parseInt(maxRoi);
+    }
+    
+    const contracts = await prisma.investmentContract.findMany({
+      where,
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json({
+      success: true,
+      count: contracts.length,
+      contracts
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch contracts',
       error: error.message
     });
   }
@@ -182,4 +312,19 @@ app.listen(PORT, () => {
   console.log(`Compile endpoint: POST http://localhost:${PORT}/compile`);
   console.log(`Test endpoint: POST http://localhost:${PORT}/test`);
   console.log(`Deployment info: GET http://localhost:${PORT}/deployment-info`);
+  console.log(`Get all contracts: GET http://localhost:${PORT}/contracts`);
+  console.log(`Get contract by address: GET http://localhost:${PORT}/contracts/:address`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\nShutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\nShutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
 });

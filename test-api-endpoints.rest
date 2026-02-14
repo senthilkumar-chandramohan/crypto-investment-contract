@@ -1,0 +1,15 @@
+POST http://localhost:6000/deploy
+Content-Type: application/json
+
+{
+    "stableCoin": "PYUSD",
+    "roiPercentage": 6.25,
+    "riskLevel": "LOW"
+}
+
+###
+
+GET http://localhost:6000/contracts
+
+###
+GET http://localhost:6000/contracts?stableCoin=PYUSD&minRoi=1000

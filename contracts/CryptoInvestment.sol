@@ -1,33 +1,60 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+}
+
 /**
  * @title CryptoInvestment
- * @dev A simple contract for managing crypto investments
+ * @dev A contract for managing crypto investments with stablecoins
  */
 contract CryptoInvestment {
     address public owner;
     uint256 public totalInvestment;
+    address public stablecoinAddress;
+    uint256 public roiPercentage;
+    
+    enum RiskLevel { LOW, MEDIUM, HIGH }
+    RiskLevel public riskLevel;
     
     mapping(address => uint256) public investments;
+    mapping(address => uint256) public investmentTimestamps;
     
     event InvestmentMade(address indexed investor, uint256 amount);
-    event InvestmentWithdrawn(address indexed investor, uint256 amount);
+    event InvestmentWithdrawn(address indexed investor, uint256 amount, uint256 interest);
     
-    constructor() {
+    constructor(address _stablecoinAddress, uint256 _roiPercentage, RiskLevel _riskLevel) {
+        require(_stablecoinAddress != address(0), "Invalid stablecoin address");
+        require(_roiPercentage > 0 && _roiPercentage <= 10000, "ROI must be between 0.01 and 100 (in basis points)");
+        
         owner = msg.sender;
+        stablecoinAddress = _stablecoinAddress;
+        roiPercentage = _roiPercentage; // Stored in basis points (e.g., 850 = 8.5%)
+        riskLevel = _riskLevel;
     }
     
     /**
-     * @dev Allow users to invest by sending Ether
+     * @dev Allow users to invest by transferring stablecoins
+     * @param sender The address for which the investment is tracked
+     * @param amount The amount to invest
      */
-    function invest() public payable {
-        require(msg.value > 0, "Investment must be greater than 0");
+    function invest(address sender, uint256 amount) public {
+        require(sender != address(0), "Invalid sender address");
+        require(amount > 0, "Investment must be greater than 0");
+        require(investments[sender] == 0, "Must withdraw existing investment first");
         
-        investments[msg.sender] += msg.value;
-        totalInvestment += msg.value;
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        require(stablecoin.transferFrom(msg.sender, address(this), amount), "Transfer failed");
         
-        emit InvestmentMade(msg.sender, msg.value);
+        investments[sender] = amount;
+        investmentTimestamps[sender] = block.timestamp;
+        totalInvestment += amount;
+        
+        emit InvestmentMade(sender, amount);
     }
     
     /**
@@ -38,24 +65,66 @@ contract CryptoInvestment {
     }
     
     /**
-     * @dev Allow users to withdraw their investment
+     * @dev Allow users to withdraw their investment with calculated returns
+     * Calculates interest based on time elapsed and ROI percentage (annualized)
+     * @param sender The address for which to withdraw the investment
      */
-    function withdraw(uint256 amount) public {
-        require(investments[msg.sender] >= amount, "Insufficient balance");
+    function withdraw(address sender) public returns (uint256) {
+        require(sender != address(0), "Invalid sender address");
+        require(investments[sender] > 0, "No investment found");
         
-        investments[msg.sender] -= amount;
-        totalInvestment -= amount;
+        uint256 principal = investments[sender];
+        uint256 timeElapsed = block.timestamp - investmentTimestamps[sender];
         
-        emit InvestmentWithdrawn(msg.sender, amount);
+        // Calculate interest: (principal * roi * timeElapsed) / (10000 * 365 days)
+        // ROI is stored in basis points (e.g., 850 = 8.5%)
+        // This gives us annualized ROI calculated per second
+        uint256 interest = (principal * roiPercentage * timeElapsed) / (10000 * 365 days);
+        uint256 totalAmount = principal + interest;
         
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
-        require(success, "Transfer failed");
+        // Reset investment data
+        investments[sender] = 0;
+        investmentTimestamps[sender] = 0;
+        totalInvestment -= principal;
+        
+        emit InvestmentWithdrawn(sender, totalAmount, interest);
+        
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        require(stablecoin.transfer(sender, totalAmount), "Transfer failed");
+        
+        return totalAmount;
     }
     
     /**
      * @dev Get total contract balance
      */
     function getContractBalance() public view returns (uint256) {
-        return address(this).balance;
+        IERC20 stablecoin = IERC20(stablecoinAddress);
+        return stablecoin.balanceOf(address(this));
+    }
+    
+    /**
+     * @dev Get risk level as string
+     */
+    function getRiskLevelString() public view returns (string memory) {
+        if (riskLevel == RiskLevel.LOW) return "LOW";
+        if (riskLevel == RiskLevel.MEDIUM) return "MEDIUM";
+        return "HIGH";
+    }
+    
+    /**
+     * @dev Calculate potential withdrawal amount for an investor
+     */
+    function calculateWithdrawalAmount(address investor) public view returns (uint256 principal, uint256 interest, uint256 total) {
+        if (investments[investor] == 0) {
+            return (0, 0, 0);
+        }
+        
+        principal = investments[investor];
+        uint256 timeElapsed = block.timestamp - investmentTimestamps[investor];
+        interest = (principal * roiPercentage * timeElapsed) / (10000 * 365 days);
+        total = principal + interest;
+        
+        return (principal, interest, total);
     }
 }

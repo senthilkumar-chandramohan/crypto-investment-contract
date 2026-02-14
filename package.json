@@ -10,7 +10,10 @@
     "deploy:hardhat": "hardhat run scripts/deploy.js --network hardhat",
     "node": "hardhat node",
     "server": "node server/index.js",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
   },
   "repository": {
     "type": "git",
@@ -25,12 +28,14 @@
   },
   "homepage": "https://github.com/senthilkumar-chandramohan/crypto-investment-contract#readme",
   "dependencies": {
+    "@prisma/client": "^6.19.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
-    "hardhat": "^2.28.6"
+    "hardhat": "^2.28.6",
+    "prisma": "^6.19.2"
   }
 }
