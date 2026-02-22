@@ -48,7 +48,7 @@ contract CryptoInvestment {
         require(investments[sender] == 0, "Must withdraw existing investment first");
         
         IERC20 stablecoin = IERC20(stablecoinAddress);
-        require(stablecoin.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        require(stablecoin.transferFrom(sender, address(this), amount), "Transfer failed");
         
         investments[sender] = amount;
         investmentTimestamps[sender] = block.timestamp;

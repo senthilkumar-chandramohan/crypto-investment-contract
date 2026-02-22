@@ -3,9 +3,12 @@ Content-Type: application/json
 
 {
     "stableCoin": "PYUSD",
-    "roiPercentage": 6.25,
+    "roiPercentage": 7.5,
     "riskLevel": "LOW"
 }
+
+###
+POST http://localhost:6000/compile
 
 ###
 
