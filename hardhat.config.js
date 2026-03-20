@@ -12,9 +12,7 @@ module.exports = {
       url: "http://127.0.0.1:8545"
     },
     sepolia: {
-      url: process.env.INFURA_API_KEY 
-        ? `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`
-        : process.env.RPC_URL || "",
+      url: process.env.RPC_URL || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111
     }
