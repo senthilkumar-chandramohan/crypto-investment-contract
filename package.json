@@ -9,7 +9,7 @@
     "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "deploy:hardhat": "hardhat run scripts/deploy.js --network hardhat",
     "node": "hardhat node",
-    "server": "node server/index.js",
+    "start": "node server/index.js",
     "clean": "hardhat clean",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

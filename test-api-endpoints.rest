@@ -15,4 +15,7 @@ POST http://localhost:6000/compile
 GET http://localhost:6000/contracts
 
 ###
+GET https://crypto-investment-contract-de07350af798.herokuapp.com/contracts
+
+###
 GET http://localhost:6000/contracts?stableCoin=PYUSD&minRoi=1000
